@@ -81,6 +81,29 @@ Got everything in place? Let's move on!
 
 4. Check out the existing backend code found in `/api/app.py`
 
+5. **🎨 Frontend Ready!** A beautiful Next.js frontend has been created in the `/frontend` directory with:
+   - Real-time streaming chat interface
+   - Modern, responsive design with Tailwind CSS
+   - Model selection and system message configuration
+   - Secure API key input
+   - Auto-scroll and loading states
+   - Ready for Vercel deployment
+
+   To run the complete application:
+   ```bash
+   # Option 1: Use the convenience script
+   ./start-app.sh
+   
+   # Option 2: Run services separately
+   # Terminal 1 - Backend
+   cd api && python -m uvicorn app:app --host 0.0.0.0 --port 8000
+   
+   # Terminal 2 - Frontend  
+   cd frontend && npm install && npm run dev
+   ```
+
+   Then visit `http://localhost:3000` to see your chat interface!
+
 </details>
 
 <details>
