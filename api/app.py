@@ -58,6 +58,7 @@ async def chat(request: ChatRequest):
         return StreamingResponse(generate(), media_type="text/plain")
     
     except Exception as e:
+        print(e)
         # Handle any errors that occur during processing
         raise HTTPException(status_code=500, detail=str(e))
 

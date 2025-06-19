@@ -21,7 +21,7 @@ check_port() {
 if ! check_port 8000; then
     echo -e "${YELLOW}📡 Starting backend API on port 8000...${NC}"
     cd api
-    python -m uvicorn app:app --host 0.0.0.0 --port 8000 &
+    python3 -m uvicorn app:app --host 0.0.0.0 --port 8000 &
     BACKEND_PID=$!
     cd ..
     sleep 3
