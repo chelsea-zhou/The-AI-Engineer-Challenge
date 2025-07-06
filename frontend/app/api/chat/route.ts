@@ -6,6 +6,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     
     // Forward the request to your backend API
+
     const backendUrl = process.env.BACKEND_URL || DEFAULT_BACKEND_URL
     const response = await fetch(`${backendUrl}/api/chat`, {
       method: 'POST',

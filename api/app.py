@@ -269,6 +269,7 @@ Please answer the user's question based on this context. If the context doesn't 
         return StreamingResponse(generate(), media_type="text/plain")
     
     except Exception as e:
+        print(e)
         # Handle any errors that occur during processing
         raise HTTPException(status_code=500, detail=str(e))
 
