@@ -7,18 +7,19 @@ from pydantic import BaseModel
 # Import OpenAI client for interacting with OpenAI's API
 from openai import OpenAI
 import os
+import sys
 import tempfile
 import shutil
 from typing import Optional, Dict, Any
-import asyncio
-import json
 import uuid
 
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+
 # Import aimakerspace components
-from aimakerspace.text_utils import PDFLoader, CharacterTextSplitter
-from aimakerspace.vectordatabase import VectorDatabase
-from aimakerspace.openai_utils.embedding import EmbeddingModel
-from aimakerspace.openai_utils.chatmodel import ChatOpenAI
+from aimakerspace import PDFLoader, CharacterTextSplitter, VectorDatabase
+from aimakerspace.openai_utils import EmbeddingModel, ChatOpenAI
 
 # Initialize FastAPI application with a title
 app = FastAPI(title="OpenAI Chat API with PDF RAG")
@@ -283,3 +284,11 @@ if __name__ == "__main__":
     import uvicorn
     # Start the server on all network interfaces (0.0.0.0) on port 8000
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+# Vercel handler for serverless deployment
+try:
+    from mangum import Adapter
+    handler = Adapter(app)
+except ImportError:
+    # mangum not available, skip handler creation
+    pass
