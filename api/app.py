@@ -112,6 +112,7 @@ async def upload_pdf(
                 'chunks': chunks,
                 'api_key': api_key
             }
+            print(f"DEBUG: Stored PDF {pdf_id}, pdf_databases now contains: {list(pdf_databases.keys())}")  # Debug log
             
             return PDFUploadResponse(
                 pdf_id=pdf_id,
@@ -135,7 +136,8 @@ async def get_pdfs():
     
     Returns PDF ID, filename, and number of chunks for each uploaded PDF.
     """
-    return [
+    print(f"DEBUG: gettting pdfs")
+    result = [
         {
             "pdf_id": pdf_id,
             "filename": data["filename"],
@@ -143,6 +145,9 @@ async def get_pdfs():
         }
         for pdf_id, data in pdf_databases.items()
     ]
+    print(f"DEBUG: Returning result: {result}")  # Debug log
+    return result
+
 
 # Delete a specific PDF
 @app.delete("/api/pdfs/{pdf_id}")
