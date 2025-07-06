@@ -238,11 +238,11 @@ export default function Home() {
           <div className="flex items-center justify-center mb-4">
             <SparklesIcon className="h-8 w-8 text-blue-600 mr-3" />
             <h1 className="text-4xl font-bold text-gray-900 dark:text-white">
-              AI Chat with PDF RAG
+              AI Chat with System Design RAG
             </h1>
           </div>
           <p className="text-gray-600 dark:text-gray-300">
-            Upload PDFs and chat with their content using advanced AI
+            Upload System Design PDFs and chat with their content using advanced AI
           </p>
         </div>
 
