@@ -1,0 +1,94 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Branch Development Rule
+
+## Always Use Feature Branches
+
+Before writing any code, you must create a feature branch to hold those changes. This ensures clean development practices and easy code review.
+
+### Required Steps:
+
+1. **Create a feature branch** before making any code changes
+2. **Make your changes** on the feature branch
+3. **Test your changes** thoroughly
+4. **Create a MERGE.md file** with merge instructions
+5. **Provide both GitHub PR and GitHub CLI merge routes**
+
+### MERGE.md Template
+
+After completing your feature, create a `MERGE.md` file in your project root with:
+
+```markdown
+# Merge Instructions
+
+## Feature: [Brief description of your feature]
+
+### Changes Made:
+- [List of changes]
+- [Files modified]
+- [New features added]
+
+### Testing:
+- [How to test the changes]
+- [What to verify]
+
+## Merge Routes
+
+### Option 1: GitHub Pull Request (Recommended)
+1. Push your feature branch to GitHub
+2. Create a Pull Request from your feature branch to main
+3. Review the changes
+4. Merge the PR
+
+### Option 2: GitHub CLI
+```bash
+# Push your feature branch
+git push origin feature-branch-name
+
+# Create PR using GitHub CLI
+gh pr create --title "Feature: [description]" --body "Detailed description of changes"
+
+# Review and merge
+gh pr view
+gh pr merge --merge
+```
+
+### Option 3: Local Merge
+```bash
+# Switch to main branch
+git checkout main
+
+# Pull latest changes
+git pull origin main
+
+# Merge your feature branch
+git merge feature-branch-name
+
+# Push to main
+git push origin main
+```
+
+### Cleanup
+```bash
+# Delete local feature branch
+git branch -d feature-branch-name
+
+# Delete remote feature branch
+git push origin --delete feature-branch-name
+```
+```
+
+### Branch Naming Convention:
+- `feature/descriptive-name` (e.g., `feature/openai-client-tests`)
+- `fix/issue-description` (e.g., `fix/import-errors`)
+- `docs/update-description` (e.g., `docs/api-documentation`)
+
+### Commit Message Convention:
+- Use conventional commits: `feat:`, `fix:`, `docs:`, `test:`, etc.
+- Be descriptive but concise
+- Reference issues when applicable
+
+This rule ensures clean development practices and makes code review and merging straightforward.

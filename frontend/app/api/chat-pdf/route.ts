@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
     
     // Forward the request to your backend API
     const backendUrl = process.env.BACKEND_URL || DEFAULT_BACKEND_URL
-    const response = await fetch(`${backendUrl}/api/chat`, {
+    const response = await fetch(`${backendUrl}/api/chat-pdf`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('Error in chat API route:', error)
+    console.error('Error in chat-pdf API route:', error)
     return NextResponse.json(
       { error: 'Failed to process request' },
       { status: 500 }
