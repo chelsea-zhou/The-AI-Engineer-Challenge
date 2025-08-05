@@ -11,7 +11,14 @@ import sys
 import tempfile
 import shutil
 from typing import Optional, Dict, Any
+import asyncio
+import json
 import uuid
+
+# # Add current directory to Python path for local imports (needed for Vercel deployment)
+# current_dir = os.path.dirname(os.path.abspath(__file__))
+# if current_dir not in sys.path:
+#     sys.path.insert(0, current_dir)
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if parent_dir not in sys.path:
@@ -19,7 +26,10 @@ if parent_dir not in sys.path:
 
 # Import aimakerspace components
 from aimakerspace import PDFLoader, CharacterTextSplitter, VectorDatabase
-from aimakerspace.openai_utils import EmbeddingModel, ChatOpenAI
+from aimakerspace.openai_utils import EmbeddingModel, ChatOpenAI as AIMakerSpaceChatOpenAI
+
+# Import LangGraph agent
+from langgraph_agent import PDFAgent
 
 # Initialize FastAPI application with a title
 app = FastAPI(title="OpenAI Chat API with PDF RAG")
@@ -37,6 +47,9 @@ app.add_middleware(
 # Global storage for vector databases (in production, use a proper database)
 pdf_databases: Dict[str, Dict[str, Any]] = {}
 
+# Initialize PDF Agent
+pdf_agent = PDFAgent(pdf_databases)
+
 # Define the data model for chat requests using Pydantic
 # This ensures incoming request data is properly validated
 class ChatRequest(BaseModel):
@@ -46,11 +59,12 @@ class ChatRequest(BaseModel):
     api_key: str          # OpenAI API key for authentication
 
 class PDFChatRequest(BaseModel):
-    developer_message: str  # Message from the developer/system
-    user_message: str      # Message from the user
-    model: Optional[str] = "gpt-4o-mini"  # Optional model selection with default
-    api_key: str          # OpenAI API key for authentication
-    pdf_id: str           # ID of the PDF to use for RAG (required for PDF chat)
+    message: str
+    model: str = "gpt-4o-mini"
+    api_key: str
+    tavily_api_key: str
+    pdf_id: str
+    system_message: str = "You are a helpful assistant that can answer questions about uploaded PDF documents and search the web for additional information when needed. Format your responses using markdown for better readability - use headers, bullet points, code blocks, and emphasis where appropriate."
 
 class PDFUploadResponse(BaseModel):
     pdf_id: str
@@ -204,75 +218,61 @@ async def chat(request: ChatRequest):
 # PDF chat endpoint with RAG support
 @app.post("/api/chat-pdf")
 async def chat_pdf(request: PDFChatRequest):
-    """
-    PDF chat endpoint with RAG functionality.
-    
-    This endpoint:
-    1. Retrieves relevant chunks from the specified PDF using vector similarity search
-    2. Injects retrieved context into the system prompt
-    3. Generates response with enhanced context from the PDF
-    """
+    """Chat with a specific PDF using RAG and web search capabilities"""
     try:
-        # Validate PDF exists
+        # Check if PDF exists
         if request.pdf_id not in pdf_databases:
             raise HTTPException(status_code=404, detail="PDF not found")
         
-        # Initialize OpenAI client with the provided API key
-        client = OpenAI(api_key=request.api_key)
+        # Stream response from the agent
+        async def generate_response():
+            try:
+                async for chunk in pdf_agent.stream_agent(
+                    pdf_id=request.pdf_id,
+                    user_message=request.message,
+                    system_message=request.system_message,
+                    openai_api_key=request.api_key,
+                    tavily_api_key=request.tavily_api_key,
+                    model_name=request.model
+                ):
+                    yield f"data: {chunk}\n\n"
+                yield "data: [DONE]\n\n"
+            except Exception as e:
+                print(f"Agent error: {e}")
+                # Fallback to simple RAG if agent fails
+                pdf_data = pdf_databases[request.pdf_id]
+                vector_db = pdf_data['vector_db']
+                
+                # Retrieve relevant chunks
+                relevant_chunks = vector_db.search_by_text(request.message, k=3, return_as_text=True)
+                context = "\n\n".join(relevant_chunks)
+                
+                # Create simple prompt
+                prompt = f"Context from PDF:\n{context}\n\nQuestion: {request.message}\n\nAnswer:"
+                
+                # Use OpenAI directly for fallback
+                import openai
+                client = openai.OpenAI(api_key=request.api_key)
+                
+                response = client.chat.completions.create(
+                    model=request.model,
+                    messages=[
+                        {"role": "system", "content": request.system_message},
+                        {"role": "user", "content": prompt}
+                    ],
+                    stream=True
+                )
+                
+                for chunk in response:
+                    if chunk.choices[0].delta.content:
+                        yield f"data: {chunk.choices[0].delta.content}\n\n"
+                yield "data: [DONE]\n\n"
         
-        # Get PDF data and vector database
-        pdf_data = pdf_databases[request.pdf_id]
-        vector_db = pdf_data['vector_db']
+        return StreamingResponse(generate_response(), media_type="text/plain")
         
-        # Retrieve relevant chunks using vector similarity search
-        relevant_chunks = vector_db.search_by_text(
-            request.user_message,
-            k=3,  # Get top 3 most relevant chunks
-            return_as_text=True
-        )
-        
-        # Create context from retrieved chunks
-        context = "\n\n".join(relevant_chunks)
-        
-        # Enhance the system message with PDF context
-        enhanced_system_message = f"""
-{request.developer_message}
-
-You are answering questions based on the content of the uploaded PDF: {pdf_data['filename']}.
-
-Here is the relevant context from the PDF:
-
-{context}
-
-Please answer the user's question based on this context. If the context doesn't contain enough information to answer the question, please say so and provide what information you can based on the available context.
-"""
-        
-        messages = [
-            {"role": "system", "content": enhanced_system_message},
-            {"role": "user", "content": request.user_message}
-        ]
-        
-        # Create an async generator function for streaming responses
-        async def generate():
-            # Create a streaming chat completion request
-            stream = client.chat.completions.create(
-                model=request.model,
-                messages=messages,
-                stream=True  # Enable streaming response
-            )
-            
-            # Yield each chunk of the response as it becomes available
-            for chunk in stream:
-                if chunk.choices[0].delta.content is not None:
-                    yield chunk.choices[0].delta.content
-
-        # Return a streaming response to the client
-        return StreamingResponse(generate(), media_type="text/plain")
-    
     except Exception as e:
-        print(e)
-        # Handle any errors that occur during processing
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Chat PDF error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error processing chat: {str(e)}")
 
 # Define a health check endpoint to verify API status
 @app.get("/api/health")

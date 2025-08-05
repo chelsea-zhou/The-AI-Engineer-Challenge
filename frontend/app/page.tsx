@@ -2,6 +2,10 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { PaperAirplaneIcon, SparklesIcon, DocumentArrowUpIcon, DocumentTextIcon, TrashIcon } from '@heroicons/react/24/outline'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -15,11 +19,78 @@ interface UploadedPDF {
   chunks_count: number
 }
 
+// Custom markdown renderer component
+const MarkdownRenderer = ({ content }: { content: string }) => {
+  return (
+    <div className="prose prose-sm max-w-none dark:prose-invert">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          code({inline, className, children, ...props}: any) {
+            const match = /language-(\w+)/.exec(className || '')
+            return !inline && match ? (
+              <SyntaxHighlighter
+                style={oneDark as any}
+                language={match[1]}
+                PreTag="div"
+                className="rounded-md"
+                {...props}
+              >
+                {String(children).replace(/\n$/, '')}
+              </SyntaxHighlighter>
+            ) : (
+              <code className="bg-gray-200 dark:bg-gray-800 px-1 py-0.5 rounded text-sm" {...props}>
+                {children}
+              </code>
+            )
+          },
+          h1: ({children}) => <h1 className="text-xl font-bold mb-2">{children}</h1>,
+          h2: ({children}) => <h2 className="text-lg font-semibold mb-2">{children}</h2>,
+          h3: ({children}) => <h3 className="text-md font-medium mb-1">{children}</h3>,
+          p: ({children}) => <p className="mb-2 last:mb-0">{children}</p>,
+          ul: ({children}) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+          ol: ({children}) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+          blockquote: ({children}) => (
+            <blockquote className="border-l-4 border-blue-500 pl-4 italic text-gray-600 dark:text-gray-400 mb-2">
+              {children}
+            </blockquote>
+          ),
+          a: ({children, href}) => (
+            <a href={href} className="text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
+              {children}
+            </a>
+          ),
+          table: ({children}) => (
+            <div className="overflow-x-auto mb-2">
+              <table className="min-w-full border border-gray-300 dark:border-gray-600">
+                {children}
+              </table>
+            </div>
+          ),
+          th: ({children}) => (
+            <th className="border border-gray-300 dark:border-gray-600 px-2 py-1 bg-gray-100 dark:bg-gray-700 font-semibold text-left">
+              {children}
+            </th>
+          ),
+          td: ({children}) => (
+            <td className="border border-gray-300 dark:border-gray-600 px-2 py-1">
+              {children}
+            </td>
+          ),
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  )
+}
+
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([])
   const [userMessage, setUserMessage] = useState('')
   const [developerMessage, setDeveloperMessage] = useState('')
   const [apiKey, setApiKey] = useState('')
+  const [tavilyApiKey, setTavilyApiKey] = useState('')
   const [model, setModel] = useState('gpt-4o-mini')
   const [isLoading, setIsLoading] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
@@ -136,7 +207,15 @@ export default function Home() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Validation checks
     if (!userMessage.trim() || !apiKey.trim()) return
+    
+    // If using PDF chat, Tavily API key is required for web search capabilities
+    if (selectedPDF && !tavilyApiKey.trim()) {
+      alert('Tavily API key is required for PDF chat with web search capabilities')
+      return
+    }
 
     const newUserMessage: Message = {
       role: 'user',
@@ -156,14 +235,15 @@ export default function Home() {
       // Prepare request body based on endpoint
       const requestBody = selectedPDF 
         ? {
-            developer_message: developerMessage || 'You are a helpful AI assistant.',
-            user_message: userMessage,
+            message: userMessage,
+            system_message: developerMessage || 'You are a helpful assistant that can answer questions about uploaded PDF documents and search the web for additional information when needed. Format your responses using markdown for better readability - use headers, bullet points, code blocks, and emphasis where appropriate.',
             model: model,
             api_key: apiKey,
+            tavily_api_key: tavilyApiKey,
             pdf_id: selectedPDF
           }
         : {
-            developer_message: developerMessage || 'You are a helpful AI assistant.',
+            developer_message: developerMessage || 'You are a helpful AI assistant. Format your responses using markdown for better readability.',
             user_message: userMessage,
             model: model,
             api_key: apiKey
@@ -268,16 +348,16 @@ export default function Home() {
                 />
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading || !apiKey.trim()}
+                  disabled={isUploading || !apiKey.trim() || !tavilyApiKey.trim()}
                   className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   <DocumentArrowUpIcon className="h-5 w-5 mr-2" />
                   {isUploading ? 'Processing...' : 'Upload PDF'}
                 </button>
               </div>
-              {!apiKey.trim() && (
+              {(!apiKey.trim() || !tavilyApiKey.trim()) && (
                 <p className="text-xs text-red-500 mt-1">
-                  Please enter your API key first
+                  Please enter both OpenAI and Tavily API keys first
                 </p>
               )}
             </div>
@@ -358,7 +438,7 @@ export default function Home() {
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
             Configuration
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 OpenAI API Key
@@ -368,6 +448,18 @@ export default function Home() {
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="sk-..."
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Tavily API Key
+              </label>
+              <input
+                type="password"
+                value={tavilyApiKey}
+                onChange={(e) => setTavilyApiKey(e.target.value)}
+                placeholder="tvly-..."
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
               />
             </div>
@@ -394,7 +486,7 @@ export default function Home() {
                 type="text"
                 value={developerMessage}
                 onChange={(e) => setDeveloperMessage(e.target.value)}
-                placeholder="You are a helpful assistant..."
+                placeholder="You are a helpful assistant. Use markdown formatting..."
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
               />
             </div>
@@ -422,13 +514,23 @@ export default function Home() {
                   className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                    className={`${
+                      message.role === 'user' 
+                        ? 'max-w-xs lg:max-w-md' 
+                        : 'max-w-sm lg:max-w-2xl'
+                    } px-4 py-2 rounded-lg ${
                       message.role === 'user'
                         ? 'bg-blue-600 text-white'
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
                     }`}
                   >
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    {message.role === 'assistant' ? (
+                      <div className="text-sm">
+                        <MarkdownRenderer content={message.content} />
+                      </div>
+                    ) : (
+                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    )}
                     <p className={`text-xs mt-1 ${
                       message.role === 'user' ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'
                     }`}>
